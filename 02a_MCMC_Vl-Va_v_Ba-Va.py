@@ -5,7 +5,6 @@ import os
 import numpy as np
 from scipy import stats
 from astropy.table import Table
-import pdb
 import matplotlib as mpl
 
 # FOR EPS PLOTS
@@ -17,6 +16,12 @@ figFmt  = 'pdf'
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import corner
+
+def truncate_colormap(cmap, minval=0.0, maxval=1.0, n=100):
+    new_cmap = colors.LinearSegmentedColormap.from_list(
+        'trunc({n},{a:.2f},{b:.2f})'.format(n=cmap.name, a=minval, b=maxval),
+        cmap(np.linspace(minval, maxval, n)))
+    return new_cmap
 
 ################################################################################
 # DEFINE FUNCTIONS FOR DEALING WITH COVARIANCE MATRICES
@@ -137,16 +142,16 @@ plotLabels = [
     r"$b_p$"]
 
 # Establish the boundaries of acceptable parameters for the prior
-bounds = [(-0.65, -0.45),   # Theta (angle of the line slope)
-          (-0.2, 0.2),      # b_perp (min-dist(line-origin))
+bounds = [(-np.pi, +np.pi), # Theta (angle of the line slope)
+          (-0.1, +0.1),     # b_perp (min-dist(line-origin))
           (0.0, 1.0),       # Pb (Probability of sampling an outliers)
-          (-8, +8),         # Mx (<x> of outlier distribution)
+          (-0.5, +2.5),     # Mx (<x> of outlier distribution)
           (0, 5),           # lnVx (log-x-variance of outlier distribution)
-          (-8, +8),         # My (<y> of outlier distribution)
+          (-2, +2),         # My (<y> of outlier distribution)
           (0, 5)]           # lnVy (log-y-variance of outlier distribution)
 
-plotBounds = [(-0.65, -0.45), # Theta (angle of the line slope)
-              (-0.2, 0.2)]    # b_perp (min-dist(line-origin))
+plotBounds = [(-0.01, +0.015), # Theta (angle of the line slope)
+              (-0.01, +0.015)] # b_perp (min-dist(line-origin))
 
 # Define a prior function for the parameters
 def ln_prior(params):
@@ -266,10 +271,10 @@ aspect  = 1.0 # For corner plots, make things square
 
 # Prepare the x-axis lengths
 xsize   = 3.39375                 # Set the figure width to full text width
-lmargin = 0.45/xsize              # Set the left margin size (l-inches/width)
-rmargin = 0.12/xsize              # Set the right margin fraction (r-inches/width)
+lmargin = 0.80/xsize              # Set the left margin size (l-inches/width)
+rmargin = 0.14/xsize              # Set the right margin fraction (r-inches/width)
 # Preapre the y-axis lengths
-bmargin = 0.45/xsize              # Set the bottom margin fraction
+bmargin = 0.50/xsize              # Set the bottom margin fraction
 tmargin = 0.12/xsize              # Set the top margin fraction (colorbar labels)
 
 b     = (1 - (lmargin + rmargin)) #Calculate the xsize-normalized plot region width
@@ -301,14 +306,14 @@ params_guess  = np.array([np.mean(b) for b in bounds])
 data          = (BV_apass, Vl_Va, e_BV_apass, e_Vl_Va)
 
 # Sampler values for the actual run...
-# n_walkers       = 500
-# n_burn_in_steps = 150
-# n_steps         = 2000
+n_walkers       = 500
+n_burn_in_steps = 300
+n_steps         = 2000
 
-# Sampler values for debugging...
-n_walkers       = 50
-n_burn_in_steps = 150
-n_steps         = 1000
+# # Sampler values for debugging...
+# n_walkers       = 50
+# n_burn_in_steps = 150
+# n_steps         = 300
 
 # Number of times to repeat sampling process.
 n_loops = 1
@@ -353,8 +358,8 @@ for iLoop in range(n_loops):
     a2,  a1  = slopeIntRanges[0][0], slopeIntRanges[1][0]
     sa2, sa1 = np.mean(slopeIntRanges[0][1:3]), np.mean(slopeIntRanges[1][1:3])
 
-    print('\nCongratulations, you are now master of the USNO-B1.0 data!\n')
-    print('V = O + a1 + a2*(O - E)')
+    print('\nCongratulations, you are now master of the APASS data!\n')
+    print('Vl = Va + a1 + a2*(B - V)a')
     print('with \n a1 = {0:.4}\t+/- {1:.4} \n a2 = {2:.4}\t+/- {3:.4}'.format(
         a1, sa1, a2, sa2))
 
@@ -363,7 +368,7 @@ for iLoop in range(n_loops):
     # (theta, b_perp) values into (slope, intercept) values.
 
     # The above code is good for reference, but here is teh actual numpy method
-    cov = np.cov(transformedSamples.T)
+    cov = np.cov(transformedSamples)
 
     print('The co-variance matrix for the fitted parameters is')
     print('1000x')
@@ -384,6 +389,8 @@ print('Generating example figures from final sampling run')
 
 # Initalize the figure frame
 dataDim    = samplerData.shape[1]
+plt.ion()
+
 fig1, axes = plt.subplots(dataDim, dataDim, figsize=(xsize, ysize))
 
 # Define the key word arguments for the corner plot 2D histograms
@@ -397,9 +404,8 @@ fig1 = corner.corner(samplerData, fig = fig1,
     hist2d_kwargs = hist2d_kwargs,
     labels=plotLabels, label_kwargs={'fontsize':8})
 
-import pdb; pdb.set_trace()
-# Reset the figure margins to conservatively use space...
-fig1.subplots_adjust(left=lmargin ,right=rmargin, top=tmargin ,bottom=bmargin)
+# # # Reset the figure margins to conservatively use space...
+# fig1.subplots_adjust(left=x1, right=x2, bottom=y1, top=y2)
 
 # Loop through all the remaining axes in the figure
 for ax in fig1.get_axes():
@@ -414,10 +420,10 @@ for ax in fig1.get_axes():
 fig1Name = figName + '_post{0:d}.pdf'.format(iLoop+1)
 fig1Path = os.path.join(figDir, fig1Name)
 fig1.savefig(fig1Path, format = figFmt)
-pdb.set_trace()
 
 # Get rid of the figure
 plt.clf()
+plt.close('all')
 del fig1
 
 ################################################################################
@@ -456,12 +462,12 @@ ax2.scatter(xData, yData, marker='.', s=22, c=post_prob, cmap=new_cmap,
     edgecolors='none', zorder = 1000)
 
 # Set the plot range, and turn-off autoscaling
-ax2.axis((-2.0, 5.0, -4.3, 2.1))
+ax2.axis((-0.5, 2.5, -0.3, 0.3))
 ax2.autoscale(False)
 
 # Plot the slope +/- sigma_intrinsic lines
 # Start by including a "typical errorbar"
-ax2.errorbar(-1.0, -3.0, xerr=data[2], yerr=data[3], color='k')
+ax2.errorbar(0.0, -0.2, xerr=np.median(data[2]), yerr=np.median(data[3]), color='k')
 
 # Create a vector spaning the x-range of the plot
 xl = np.array(ax2.get_xlim())
@@ -493,6 +499,6 @@ fig2.savefig(fig2Path, format = figFmt)
 # Get rid of the figure
 plt.clf()
 del fig2
-
+plt.close('all')
 
 print('done')
